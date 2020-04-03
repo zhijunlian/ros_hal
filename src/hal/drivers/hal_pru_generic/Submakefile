@@ -1,0 +1,64 @@
+ifdef TARGET_PLATFORM_BEAGLEBONE
+
+PRUBINDIR := ../rtlib/prubin
+
+# support for ARM335x PRU (Programmable Realtime Unit) components and
+SUPPORT_DIR := hal/support
+PRU_SRC_DIR := hal/drivers/hal_pru_generic
+PRU_MAINS   := pru_generic pru_decamux
+
+# Assembly of PRU code
+# the list of assembly source files
+PRU_FILES := $(wildcard $(PRU_SRC_DIR)/*.p)
+
+# .bin file produced by PASM -b goes in rtlib
+PRU_BIN := $(patsubst %,$(PRUBINDIR)/%.bin,$(PRU_MAINS))
+PRU_DBG := $(patsubst %,$(PRUBINDIR)/%.dbg,$(PRU_MAINS))
+
+modules : $(PRU_BIN) $(PRU_DBG)
+
+# .bin output, create listing
+PASM_BINFLAGS := -b -L -d
+
+# conversion rule for the above
+# assemble .p  into .bin object files
+
+$(PRUBINDIR)/%.bin $(PRUBINDIR)/%.dbg: $(PASM)
+
+
+PRU_DEPS := $(patsubst %,objects/%,$(patsubst %,$(PRU_SRC_DIR)/%.d,$(PRU_MAINS)))
+PRU_OBJS := $(patsubst %,objects/%,$(patsubst %,$(PRU_SRC_DIR)/%.bin,$(PRU_MAINS)))
+PRU_DBGS := $(patsubst %,objects/%,$(patsubst %,$(PRU_SRC_DIR)/%.dbg,$(PRU_MAINS)))
+
+$(PRU_DEPS): objects/%.d : %.p
+	$(Q)mkdir -p $(dir $@)
+	$(ECHO) generate PRU dependency $@ from $<
+	$(Q)cpp -x c -MM -MG -MT objects/$(patsubst %.p,%.bin,$<) -o $@ $<
+
+objects/%.bin objects/%.dbg : %.p objects/%.d $(PASM)
+	$(Q)mkdir -p $(PRUBINDIR)
+	$(ECHO) Assembling PRU code $@
+	$(Q)$(PASM) $(PASM_BINFLAGS) $< $(basename $@)
+
+$(PRU_BIN): $(PRUBINDIR)/%.bin : objects/$(PRU_SRC_DIR)/%.bin
+	cp -f $^ $@
+	$(Q)mkdir -p $(RTLIBDIR)
+	ln -sf ../prubin/$(notdir $@) $(RTLIBDIR)/$(notdir $@)
+
+$(PRU_DBG): $(PRUBINDIR)/%.dbg : objects/$(PRU_SRC_DIR)/%.dbg
+	cp -f $^ $@
+	$(Q)mkdir -p $(RTLIBDIR)
+	ln -sf ../prubin/$(notdir $@) $(RTLIBDIR)/$(notdir $@)
+
+install_prubin:
+	$(DIR) $(DESTDIR)$(EMC2_RTLIB_BASE_DIR)/prubin
+#	#  Copy .bin and .dbg files to the rtlib/prubin directory
+	$(FILE) $(PRUBINDIR)/*.bin $(DESTDIR)$(EMC2_RTLIB_BASE_DIR)/prubin
+	$(FILE) $(PRUBINDIR)/*.dbg $(DESTDIR)$(EMC2_RTLIB_BASE_DIR)/prubin
+#	#  Copy .bin and .dbg symlinks to the rtlib/modules directory
+	$(DIR) $(DESTDIR)$(EMC2_RTLIB_DIR)
+	cp -a $(RTLIBDIR)/*.bin $(RTLIBDIR)/*.dbg $(DESTDIR)$(EMC2_RTLIB_DIR)
+
+install:  install_prubin
+
+endif

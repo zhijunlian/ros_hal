@@ -1,0 +1,2 @@
+rtapi_init() failed: -EBUSY
+rtapi_init() succeeded
